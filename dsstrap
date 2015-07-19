@@ -1,0 +1,172 @@
+#!/usr/bin/python
+
+import os
+import pickle
+import shutil
+import stat
+import subprocess
+import sys
+
+tools = {}
+
+ABS_PATH = '/home/endeavor/code/dsstrap/'
+
+TOOLS_PATH = os.path.join(ABS_PATH, 'tools')
+BIN_PATH = os.path.join(ABS_PATH, 'bin')
+
+
+class Command :
+    def __init__ (self, command, path=None) :
+        self.command = command
+        self.path = path
+
+    def __str__ (self) :
+        return 'Command: ' + self.command
+
+    def execute (self) :
+        if self.path != None :
+            os.chdir(self.path)
+        proc = subprocess.Popen(self.command, shell=True)
+        if proc.wait() != 0 :
+            return False
+        return True
+
+class StrReplace :
+    def __init__ (self, path, needle, value) :
+        self.path = path
+        self.needle = needle
+        self.value = value
+
+    def __str__ (self) :
+        return 'StrReplace: ' + self.needle + ' -> ' + self.value
+
+    def execute (self) :
+        fh = open(self.path, 'rb')
+        data = fh.read()
+        fh.close()
+        data = data.replace(self.needle, self.value)
+        fh = open(self.path, 'wb')
+        fh.write(data)
+        fh.close()
+        return True
+
+
+tools['0d1n'] = {
+    'name': '0d1n',
+    'description': '0d1n is a tool for automating customized attacks against web applications',
+    'project-url': 'https://github.com/CoolerVoid/0d1n',
+    'deps': ['libcurl4-openssl-dev', 'git', 'build-essential'],
+    'build': [Command('git clone https://github.com/CoolerVoid/0d1n.git'),
+              Command('make', '0d1n')],
+    'bins': {
+        '0din': os.path.join(TOOLS_PATH, '0d1n', '0d1n', '0d1n')
+    }
+}
+
+tools['acccheck'] = {
+    'name': 'acccheck',
+    'description': 'Password dictionary attack over SMB using smbclient',
+    'project-url': 'https://labs.portcullis.co.uk/tools/acccheck/',
+    'deps': ['smbclient'],
+    'build': [Command('wget https://labs.portcullis.co.uk/download/acccheck-0-2-1.tar.gz'),
+              Command('gzip -d acccheck-0-2-1.tar.gz'),
+              Command('tar -xf acccheck-0-2-1.tar')],
+    'bins': {
+        'acccheck': os.path.join(TOOLS_PATH, 'acccheck', 'acccheck-0-2-1', 'acccheck.pl')
+    }
+}
+
+tools['apktool'] = {
+    'name': 'apktool',
+    'description': 'The Browser Exploitation Framework',
+    'project-url': 'http://beefproject.com/',
+    'deps': ['openjdk-7-jre'],
+    'build': [Command('wget https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/linux/apktool'),
+              Command('wget https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.0.1.jar'),
+              StrReplace(os.path.join(TOOLS_PATH, 'apktool', 'apktool'),
+                         'apktool.jar',
+                         'apktool_2.0.1.jar'),
+              Command('chmod +x apktool'),
+              Command('chmod +x apktool_2.0.1.jar')],
+    'bins': {
+        'apktool': os.path.join(TOOLS_PATH, 'apktool', 'apktool')
+    }
+}
+
+
+
+def do_help () :
+    print '''dsstrap : Debian Sec bootStrap
+    help      this page
+    list      list available packages
+    install   install a package by name
+'''
+
+
+
+def do_list () :
+    keys = tools.keys()
+    keys.sort()
+
+    for k in keys :
+        print tools[k]['name']
+
+
+
+def do_install (tool_name) :
+    print 'installing ' + tool_name
+    if not tools.has_key(tool_name) :
+        print 'tool ' + tool_name + ' does not exist'
+
+    tool = tools[tool_name]
+
+    # install deps
+    print 'root password for dependencies'
+    cmd = 'su -c "apt-get install ' + ' '.join(tool['deps']) + '"'
+    proc = subprocess.Popen(cmd, shell=True)
+    retcode = proc.wait()
+    if retcode != 0 :
+        return
+
+    # prepare tool dir
+    tool_path = os.path.join(TOOLS_PATH, tool_name)
+    if os.path.exists(tool_path) :
+        shutil.rmtree(tool_path)
+    os.makedirs(tool_path)
+    os.chdir(tool_path)
+
+    # build it
+    for command in tool['build'] :
+        os.chdir(tool_path)
+        if not command.execute() :
+            print 'error executing a command'
+            return
+
+    # bin it
+    # make dir if not exist
+    if not os.path.exists(BIN_PATH) :
+        os.makedirs(BIN_PATH)
+    for b in tool['bins'] :
+        fh = open(os.path.join(BIN_PATH, b), 'w')
+        fh.write(tool['bins'][b])
+        fh.close()
+        os.chmod(os.path.join(BIN_PATH, b), stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+
+if len(sys.argv) < 2 :
+    do_help()
+    sys.exit()
+
+elif sys.argv[1] == 'help' :
+    do_help()
+
+elif sys.argv[1] == 'list' :
+    do_list()
+
+elif sys.argv[1] == 'install' :
+    if len(sys.argv) != 3 :
+        print 'usage: ' + sys.argv[0] + ' install <package_name>'
+        sys.exit()
+    do_install(sys.argv[2])
+
+else :
+    print 'error, invalid command: ' + sys.argv[1]

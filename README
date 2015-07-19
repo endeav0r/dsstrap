@@ -1,0 +1,18 @@
+dsstrap: Debian Security bootSTRAP
+
+Select offensive security packages for Debian Stable for the incredibly lazy.
+
+
+
+BEGIN TUTORIAL:
+
+1) Edit the lines at the beginning of dsstrap to reflect the directories you
+want to store projects in, and where you want "bins" dropped. You may want to
+add BIN_PATH to your shell PATH.
+
+2) Try this:
+
+dsstrap list
+dsstrap install 0d1n
+
+END TUTORIAL
